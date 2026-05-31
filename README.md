@@ -7,9 +7,10 @@
 ## 특징
 
 - **백엔드 무관 (헥사고날 아키텍처)** — 도메인/유스케이스는 순수하게 유지하고, 각 인프라는 어댑터로 붙입니다. 새 백엔드 대응 = 어댑터 1개 추가.
-- **beads 우선 지원** — `bd --json` 출력을 셸아웃으로 활용 (의존성·우선순위·라벨·상태).
-- **backlog.md** — 추후 동일 포트로 지원 예정.
-- **ratatui 기반 TUI** — 리스트/상세 뷰, 칸반 보드, 생성·수정 모달, 검색·필터.
+- **beads** — `bd --json` 출력을 셸아웃으로 활용 (의존성·우선순위·라벨·상태).
+- **backlog.md** — `backlog --plain` 출력 파싱으로 지원.
+- **memory** — 백엔드 없이 동작하는 인메모리(데모/체험용).
+- **ratatui 기반 TUI** — 리스트/상세 뷰, 칸반 보드, 생성·수정 모달, 검색·필터, 도움말.
 - **XDG 설정** — `~/.config/taskr/config.json`.
 
 ## 아키텍처
@@ -58,14 +59,23 @@ flowchart LR
 
 ## 요구 사항
 
-- Rust 1.89+
-- 백엔드 CLI: [`bd`](https://github.com/) (beads) — `taskr` 실행 전에 대상 프로젝트에서 `bd init` 필요
+- Rust 1.89+ (edition 2024)
+- 선택한 백엔드의 CLI:
+  - **beads**: `bd` — 대상 프로젝트에서 `bd init` 필요 (`config.beads.dir` 또는 cwd/`BEADS_DIR`)
+  - **backlog.md**: `backlog` — `backlog init` 필요 (`config.backlog.project_path` 또는 cwd)
+  - **memory**: 외부 CLI 불필요
 
 ## 빌드 & 실행
 
 ```bash
 cargo build --release
-cargo run            # 또는: ./target/release/taskr
+
+# 설정의 backend 사용
+cargo run
+
+# 백엔드/설정을 인자로 오버라이드
+cargo run -- --backend memory
+cargo run -- --backend backlog --config /path/to/config.json
 ```
 
 ## 키맵 (초안)
@@ -84,7 +94,7 @@ cargo run            # 또는: ./target/release/taskr
 
 ## 상태
 
-🚧 개발 중. 자세한 구현 계획은 내부 플랜 문서를 따릅니다.
+beads · backlog.md · memory 세 백엔드에서 목록/생성/수정/완료/삭제·검색·필터·칸반 보드가 동작합니다.
 
 ## 라이선스
 

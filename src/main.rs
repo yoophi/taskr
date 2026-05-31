@@ -2,10 +2,6 @@
 //!
 //! `main`은 Composition Root다: 설정을 읽어 백엔드 어댑터를 선택·주입하고 TUI를 띄운다.
 
-// 코어/어댑터를 점진적으로 조립하는 동안에는 아직 UI에서 호출되지 않는 코드가 있다.
-// 전체 배선이 끝나는 마감 단계에서 제거한다.
-#![allow(dead_code)]
-
 mod adapters;
 mod config;
 mod domain;
@@ -17,6 +13,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use color_eyre::Result;
 
+use crate::adapters::backlog::BacklogMdRepository;
 use crate::adapters::beads::BeadsRepository;
 use crate::adapters::config_file::FileConfigStore;
 use crate::adapters::memory::MemoryRepository;
@@ -66,8 +63,7 @@ fn main() -> Result<()> {
 fn build_repository(config: &Config) -> Box<dyn TaskRepository> {
     match config.backend {
         Backend::Beads => Box::new(BeadsRepository::new(&config.beads)),
+        Backend::Backlog => Box::new(BacklogMdRepository::new(&config.backlog)),
         Backend::Memory => Box::new(MemoryRepository::new()),
-        // backlog.md 어댑터는 아직 미구현 — 임시로 메모리로 폴백한다(이후 단계에서 교체).
-        Backend::Backlog => Box::new(MemoryRepository::new()),
     }
 }

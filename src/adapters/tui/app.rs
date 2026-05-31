@@ -200,8 +200,13 @@ impl App {
     }
 
     pub fn start_edit(&mut self) {
-        if let Some(task) = self.selected() {
-            self.mode = Mode::Form(Form::for_edit(task));
+        let Some(id) = self.selected().map(|t| t.id.clone()) else {
+            return;
+        };
+        // 목록 캐시 대신 백엔드에서 최신 상세를 불러온다(예: backlog는 설명이 목록에 없음).
+        match self.api.get(&id) {
+            Ok(task) => self.mode = Mode::Form(Form::for_edit(&task)),
+            Err(e) => self.status = format!("오류: {e}"),
         }
     }
 

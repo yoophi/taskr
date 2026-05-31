@@ -54,7 +54,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         Mode::Form(_) => draw_form(frame, app),
         Mode::ConfirmDelete { title, .. } => draw_confirm(frame, title),
         Mode::Search(query) => draw_search(frame, query),
-        Mode::Help => draw_help(frame),
+        Mode::Help => draw_help(frame, &app.config_path),
     }
 }
 
@@ -104,8 +104,8 @@ fn draw_search(frame: &mut Frame, query: &str) {
     );
 }
 
-fn draw_help(frame: &mut Frame) {
-    let area = centered_rect(46, 16, frame.area());
+fn draw_help(frame: &mut Frame, config_path: &str) {
+    let area = centered_rect(56, 18, frame.area());
     frame.render_widget(Clear, area);
     let rows = [
         ("j / k, ↑ / ↓", "이동 (보드: 컬럼 내)"),
@@ -127,8 +127,10 @@ fn draw_help(frame: &mut Frame) {
             Span::raw(v),
         ]));
     }
+    lines.push(Line::raw(""));
+    lines.push(Line::styled(format!("  설정: {config_path}"), Style::new().fg(Color::DarkGray)));
     frame.render_widget(
-        Paragraph::new(Text::from(lines)).block(Block::bordered().title(" 도움말 ")),
+        Paragraph::new(Text::from(lines)).block(Block::bordered().title(" 도움말 (아무 키나 닫기) ")),
         area,
     );
 }

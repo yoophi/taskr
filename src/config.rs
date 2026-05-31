@@ -12,20 +12,10 @@ pub enum Backend {
     /// beads(`bd` CLI).
     #[default]
     Beads,
-    /// backlog.md(`backlog` CLI). (추후 지원)
+    /// backlog.md(`backlog` CLI).
     Backlog,
     /// 인메모리(백엔드 없이 데모/테스트).
     Memory,
-}
-
-impl Backend {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Backend::Beads => "beads",
-            Backend::Backlog => "backlog",
-            Backend::Memory => "memory",
-        }
-    }
 }
 
 /// 시작 시 표시할 기본 뷰.
