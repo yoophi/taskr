@@ -1,12 +1,12 @@
 //! 렌더링. App 상태를 ratatui 위젯으로 그린다(부수효과 없음).
 
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::layout::{Constraint, Flex, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, List, ListItem, Paragraph, Wrap};
+use ratatui::widgets::{Block, Clear, List, ListItem, Paragraph, Wrap};
 
-use crate::adapters::tui::app::App;
+use crate::adapters::tui::app::{App, FormField, Mode};
 use crate::domain::model::{Priority, Status, Task};
 
 /// 상태별 표시 색.
@@ -40,6 +40,76 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     draw_list(frame, app, list_area);
     draw_detail(frame, app.selected(), detail_area);
     draw_statusbar(frame, app, statusbar);
+
+    // 모달은 본문 위에 덧그린다.
+    match &app.mode {
+        Mode::Normal => {}
+        Mode::Form(_) => draw_form(frame, app),
+        Mode::ConfirmDelete { title, .. } => draw_confirm(frame, title),
+    }
+}
+
+/// 화면 중앙에 가로/세로 비율로 영역을 잡는다.
+fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
+    let [v] = Layout::vertical([Constraint::Length(height)]).flex(Flex::Center).areas(area);
+    let [h] = Layout::horizontal([Constraint::Length(width)]).flex(Flex::Center).areas(v);
+    h
+}
+
+fn draw_form(frame: &mut Frame, app: &App) {
+    let Mode::Form(form) = &app.mode else { return };
+    let area = centered_rect(60, 11, frame.area());
+    frame.render_widget(Clear, area);
+
+    let title = if form.is_edit() { " 작업 수정 " } else { " 새 작업 " };
+    let field_line = |label: &str, value: &str, focused: bool| -> Line<'static> {
+        let marker = if focused { "▶ " } else { "  " };
+        let style = if focused {
+            Style::new().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        } else {
+            Style::new()
+        };
+        Line::from(vec![
+            Span::styled(format!("{marker}{label:<5} "), style),
+            Span::raw(value.to_string()),
+            if focused { Span::styled("▏", Style::new().fg(Color::Yellow)) } else { Span::raw("") },
+        ])
+    };
+
+    let lines = vec![
+        field_line("제목", &form.title, form.field == FormField::Title),
+        field_line("설명", &form.description, form.field == FormField::Description),
+        field_line(
+            "우선",
+            &format!("◀ {} ▶", form.priority.label()),
+            form.field == FormField::Priority,
+        ),
+        Line::raw(""),
+        Line::styled(
+            "Tab/↑↓ 필드  ←→ 우선순위  Enter 저장  Esc 취소",
+            Style::new().fg(Color::DarkGray),
+        ),
+    ];
+    frame.render_widget(
+        Paragraph::new(Text::from(lines)).block(Block::bordered().title(title)).wrap(Wrap { trim: false }),
+        area,
+    );
+}
+
+fn draw_confirm(frame: &mut Frame, title: &str) {
+    let area = centered_rect(50, 6, frame.area());
+    frame.render_widget(Clear, area);
+    let lines = vec![
+        Line::raw(""),
+        Line::from(vec![Span::raw("  삭제할까요? "), Span::styled(title.to_string(), Style::new().add_modifier(Modifier::BOLD))]),
+        Line::raw(""),
+        Line::styled("  y/Enter 삭제    n/Esc 취소", Style::new().fg(Color::DarkGray)),
+    ];
+    frame.render_widget(
+        Paragraph::new(Text::from(lines))
+            .block(Block::bordered().title(" 삭제 확인 ").border_style(Style::new().fg(Color::Red))),
+        area,
+    );
 }
 
 fn draw_list(frame: &mut Frame, app: &mut App, area: Rect) {
@@ -116,12 +186,17 @@ fn kv(key: &str, value: &str) -> Line<'static> {
 
 fn draw_statusbar(frame: &mut Frame, app: &App, area: Rect) {
     let left = format!(" [{}] {} ", app.backend_name(), app.status);
-    let hints = "j/k 이동  r 새로고침  q 종료 ";
-    let [l, r] =
-        Layout::horizontal([Constraint::Min(1), Constraint::Length(hints.len() as u16)]).areas(area);
+    let hints = "n 새작업  e 수정  d 삭제  space 완료  r 새로고침  q 종료 ";
+    let [l, r] = Layout::horizontal([Constraint::Min(1), Constraint::Length(display_width(hints))])
+        .areas(area);
     frame.render_widget(Paragraph::new(left).style(Style::new().bg(Color::DarkGray).fg(Color::White)), l);
     frame.render_widget(
         Paragraph::new(hints).style(Style::new().bg(Color::DarkGray).fg(Color::Gray)),
         r,
     );
+}
+
+/// 터미널 표시 폭 근사(ASCII는 1칸, 그 외 한글 등은 2칸).
+fn display_width(s: &str) -> u16 {
+    s.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum::<usize>() as u16
 }

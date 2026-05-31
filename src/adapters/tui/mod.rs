@@ -8,6 +8,7 @@ pub use app::App;
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 
+use crate::adapters::tui::app::Mode;
 use crate::config::View;
 use crate::error::Result;
 use crate::ports::TaskApi;
@@ -29,21 +30,59 @@ pub fn run(
     Ok(())
 }
 
-/// 한 번의 입력 이벤트를 처리한다.
+/// 한 번의 입력 이벤트를 모드별로 처리한다.
 fn handle_event(app: &mut App) -> Result<()> {
     // 윈도우에서는 press/release 두 번 들어오므로 press만 처리한다.
-    if let Event::Key(key) = event::read()?
-        && key.kind == KeyEventKind::Press
-    {
-        match key.code {
-            KeyCode::Char('q') => app.should_quit = true,
-            KeyCode::Char('j') | KeyCode::Down => app.next(),
-            KeyCode::Char('k') | KeyCode::Up => app.prev(),
-            KeyCode::Char('g') | KeyCode::Home => app.first(),
-            KeyCode::Char('G') | KeyCode::End => app.last(),
-            KeyCode::Char('r') => app.refresh(),
-            _ => {}
-        }
+    let Event::Key(key) = event::read()? else {
+        return Ok(());
+    };
+    if key.kind != KeyEventKind::Press {
+        return Ok(());
+    }
+
+    match &app.mode {
+        Mode::Normal => handle_normal(app, key.code),
+        Mode::Form(_) => handle_form(app, key.code),
+        Mode::ConfirmDelete { .. } => handle_confirm(app, key.code),
     }
     Ok(())
+}
+
+fn handle_normal(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Char('q') => app.should_quit = true,
+        KeyCode::Char('j') | KeyCode::Down => app.next(),
+        KeyCode::Char('k') | KeyCode::Up => app.prev(),
+        KeyCode::Char('g') | KeyCode::Home => app.first(),
+        KeyCode::Char('G') | KeyCode::End => app.last(),
+        KeyCode::Char('r') => app.refresh(),
+        KeyCode::Char('n') => app.start_create(),
+        KeyCode::Char('e') => app.start_edit(),
+        KeyCode::Char('d') => app.start_delete(),
+        KeyCode::Char(' ') => app.toggle_status(),
+        _ => {}
+    }
+}
+
+fn handle_form(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Esc => app.cancel_modal(),
+        KeyCode::Enter => app.submit_form(),
+        KeyCode::Tab | KeyCode::Down => app.form_next_field(),
+        KeyCode::BackTab | KeyCode::Up => app.form_prev_field(),
+        // 우선순위 필드에서는 좌우로 값을 바꾼다.
+        KeyCode::Left if app.form_on_priority() => app.form_cycle_priority(-1),
+        KeyCode::Right if app.form_on_priority() => app.form_cycle_priority(1),
+        KeyCode::Backspace => app.form_backspace(),
+        KeyCode::Char(c) => app.form_input(c),
+        _ => {}
+    }
+}
+
+fn handle_confirm(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => app.confirm_delete(),
+        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => app.cancel_modal(),
+        _ => {}
+    }
 }
