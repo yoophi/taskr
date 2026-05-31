@@ -1,0 +1,13 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# 환경/로컬
+.DS_Store
+*.log
+
+# 백엔드 스크래치 데이터 (로컬 테스트용)
+/.beads/
+/backlog/
+/scratch/
