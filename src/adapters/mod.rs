@@ -5,4 +5,5 @@
 //! - (추후) `backlog`: backlog.md 어댑터.
 //! - (추후) `tui`: ratatui 인바운드 어댑터.
 
+pub mod config_file;
 pub mod memory;
