@@ -11,3 +11,8 @@
 /.beads/
 /backlog/
 /scratch/
+
+
+# Added by cargo
+
+/target
