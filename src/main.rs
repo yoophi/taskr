@@ -3,6 +3,15 @@
 //! 현재는 스캐폴드 단계: 터미널을 안전하게 초기화/복구하고 빈 화면을 그린 뒤
 //! `q` 입력 시 종료한다. 이후 단계에서 도메인/포트/어댑터/UI가 채워진다.
 
+// 코어/어댑터를 점진적으로 조립하는 동안에는 아직 UI에서 호출되지 않는 코드가 있다.
+// 전체 배선이 끝나는 마감 단계에서 제거한다.
+#![allow(dead_code)]
+
+mod adapters;
+mod domain;
+mod error;
+mod ports;
+
 use color_eyre::Result;
 use ratatui::DefaultTerminal;
 use ratatui::Frame;
