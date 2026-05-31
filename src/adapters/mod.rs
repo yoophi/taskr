@@ -8,3 +8,4 @@
 pub mod beads;
 pub mod config_file;
 pub mod memory;
+pub mod tui;
