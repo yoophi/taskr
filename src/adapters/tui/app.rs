@@ -97,6 +97,10 @@ pub enum Mode {
     Normal,
     Form(Form),
     ConfirmDelete { id: String, title: String },
+    /// 텍스트 검색 입력 중(현재까지 입력된 질의).
+    Search(String),
+    /// 도움말 오버레이.
+    Help,
 }
 
 pub struct App {
@@ -106,6 +110,8 @@ pub struct App {
     pub list_state: ListState,
     pub view: View,
     pub mode: Mode,
+    /// 현재 적용 중인 목록 필터(상태/우선순위/라벨/텍스트).
+    pub filter: Filter,
     /// 하단 상태바 메시지(개수/결과/에러).
     pub status: String,
     pub should_quit: bool,
@@ -120,6 +126,7 @@ impl App {
             list_state: ListState::default(),
             view,
             mode: Mode::Normal,
+            filter: Filter::default(),
             status: String::new(),
             should_quit: false,
         }
@@ -132,7 +139,7 @@ impl App {
     // ── 목록/선택 ────────────────────────────────────────────────
 
     pub fn refresh(&mut self) {
-        match self.api.list(&Filter::default()) {
+        match self.api.list(&self.filter) {
             Ok(tasks) => {
                 self.tasks = tasks;
                 self.clamp_selection();
@@ -308,6 +315,147 @@ impl App {
             Ok(()) => self.refresh(),
             Err(e) => self.status = format!("오류: {e}"),
         }
+    }
+
+    // ── 뷰 전환 / 방향 이동(뷰에 따라 분기) ─────────────────────
+
+    pub fn toggle_view(&mut self) {
+        self.view = match self.view {
+            View::List => View::Board,
+            View::Board => View::List,
+        };
+    }
+
+    pub fn move_down(&mut self) {
+        match self.view {
+            View::List => self.next(),
+            View::Board => self.board_move(0, 1),
+        }
+    }
+    pub fn move_up(&mut self) {
+        match self.view {
+            View::List => self.prev(),
+            View::Board => self.board_move(0, -1),
+        }
+    }
+    pub fn move_left(&mut self) {
+        if matches!(self.view, View::Board) {
+            self.board_move(-1, 0);
+        }
+    }
+    pub fn move_right(&mut self) {
+        if matches!(self.view, View::Board) {
+            self.board_move(1, 0);
+        }
+    }
+
+    /// 보드 뷰에서 선택을 열(상태) `dcol`, 행 `drow` 만큼 이동한다.
+    fn board_move(&mut self, dcol: i32, drow: i32) {
+        if self.tasks.is_empty() {
+            return;
+        }
+        let cur = self.list_state.selected().unwrap_or(0);
+        let cur_status = self.tasks[cur].status;
+        let col = Status::ALL.iter().position(|s| *s == cur_status).unwrap_or(0);
+        let col_idx = self.indices_in_status(cur_status);
+        let row = col_idx.iter().position(|&i| i == cur).unwrap_or(0);
+
+        if drow != 0 && !col_idx.is_empty() {
+            let n = col_idx.len() as i32;
+            let r = (row as i32 + drow).clamp(0, n - 1) as usize;
+            self.list_state.select(Some(col_idx[r]));
+            return;
+        }
+        if dcol != 0 {
+            let ncols = Status::ALL.len() as i32;
+            let mut c = col as i32 + dcol;
+            while (0..ncols).contains(&c) {
+                let idxs = self.indices_in_status(Status::ALL[c as usize]);
+                if !idxs.is_empty() {
+                    let r = row.min(idxs.len() - 1);
+                    self.list_state.select(Some(idxs[r]));
+                    return;
+                }
+                c += dcol;
+            }
+        }
+    }
+
+    /// 주어진 상태에 속한 작업들의 `self.tasks` 인덱스 목록(표시 순서 유지).
+    pub fn indices_in_status(&self, status: Status) -> Vec<usize> {
+        self.tasks
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.status == status)
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    pub fn selected_index(&self) -> Option<usize> {
+        self.list_state.selected()
+    }
+
+    // ── 검색 / 필터 ──────────────────────────────────────────────
+
+    pub fn start_search(&mut self) {
+        self.mode = Mode::Search(self.filter.text.clone().unwrap_or_default());
+    }
+    pub fn search_input(&mut self, c: char) {
+        if let Mode::Search(s) = &mut self.mode {
+            s.push(c);
+        }
+    }
+    pub fn search_backspace(&mut self) {
+        if let Mode::Search(s) = &mut self.mode {
+            s.pop();
+        }
+    }
+    /// 검색을 확정한다(텍스트 필터 적용 후 새로고침).
+    pub fn submit_search(&mut self) {
+        let Mode::Search(query) = std::mem::replace(&mut self.mode, Mode::Normal) else {
+            return;
+        };
+        let q = query.trim();
+        self.filter.text = if q.is_empty() { None } else { Some(q.to_string()) };
+        self.refresh();
+    }
+
+    /// 상태 필터를 순환한다(전체→Open→…→Done→전체).
+    pub fn cycle_status_filter(&mut self) {
+        self.filter.status = match self.filter.status {
+            None => Some(Status::Open),
+            Some(Status::Open) => Some(Status::InProgress),
+            Some(Status::InProgress) => Some(Status::Blocked),
+            Some(Status::Blocked) => Some(Status::Deferred),
+            Some(Status::Deferred) => Some(Status::Done),
+            Some(Status::Done) => None,
+        };
+        self.refresh();
+    }
+
+    /// 모든 필터를 해제한다.
+    pub fn clear_filter(&mut self) {
+        if !self.filter.is_empty() {
+            self.filter = Filter::default();
+            self.refresh();
+            self.status = "필터 해제".into();
+        }
+    }
+
+    pub fn show_help(&mut self) {
+        self.mode = Mode::Help;
+    }
+
+    /// 상태바에 표시할 필터 요약(없으면 빈 문자열).
+    pub fn filter_summary(&self) -> String {
+        let mut parts = Vec::new();
+        if let Some(s) = self.filter.status {
+            parts.push(format!("상태={}", s.label()));
+        }
+        if let Some(t) = &self.filter.text {
+            parts.push(format!("검색='{t}'"));
+        }
+        if parts.is_empty() { String::new() } else { format!("[{}] ", parts.join(" ")) }
     }
 }
 

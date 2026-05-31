@@ -7,6 +7,7 @@ use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Clear, List, ListItem, Paragraph, Wrap};
 
 use crate::adapters::tui::app::{App, FormField, Mode};
+use crate::config::View;
 use crate::domain::model::{Priority, Status, Task};
 
 /// 상태별 표시 색.
@@ -34,19 +35,102 @@ fn priority_color(p: Priority) -> Color {
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let [body, statusbar] =
         Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(frame.area());
-    let [list_area, detail_area] =
-        Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)]).areas(body);
 
-    draw_list(frame, app, list_area);
-    draw_detail(frame, app.selected(), detail_area);
+    match app.view {
+        View::List => {
+            let [list_area, detail_area] =
+                Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)])
+                    .areas(body);
+            draw_list(frame, app, list_area);
+            draw_detail(frame, app.selected(), detail_area);
+        }
+        View::Board => draw_board(frame, app, body),
+    }
     draw_statusbar(frame, app, statusbar);
 
-    // 모달은 본문 위에 덧그린다.
+    // 모달/오버레이는 본문 위에 덧그린다.
     match &app.mode {
         Mode::Normal => {}
         Mode::Form(_) => draw_form(frame, app),
         Mode::ConfirmDelete { title, .. } => draw_confirm(frame, title),
+        Mode::Search(query) => draw_search(frame, query),
+        Mode::Help => draw_help(frame),
     }
+}
+
+/// 칸반 보드: 상태별 컬럼. 선택된 작업은 해당 컬럼에서 반전 강조한다.
+fn draw_board(frame: &mut Frame, app: &App, area: Rect) {
+    let cols = Status::ALL.len();
+    let constraints: Vec<Constraint> =
+        (0..cols).map(|_| Constraint::Ratio(1, cols as u32)).collect();
+    let areas = Layout::horizontal(constraints).split(area);
+    let selected = app.selected_index();
+
+    for (ci, status) in Status::ALL.iter().enumerate() {
+        let idxs = app.indices_in_status(*status);
+        let items: Vec<ListItem> = idxs
+            .iter()
+            .map(|&i| {
+                let t = &app.tasks[i];
+                let mut style = Style::new();
+                if Some(i) == selected {
+                    style = style.add_modifier(Modifier::REVERSED);
+                }
+                let line = Line::from(vec![
+                    Span::styled(
+                        format!("{} ", t.priority.label()),
+                        Style::new().fg(priority_color(t.priority)),
+                    ),
+                    Span::raw(t.title.clone()),
+                ])
+                .style(style);
+                ListItem::new(line)
+            })
+            .collect();
+        let title = format!(" {} ({}) ", status.label(), idxs.len());
+        let block =
+            Block::bordered().title(title).border_style(Style::new().fg(status_color(*status)));
+        frame.render_widget(List::new(items).block(block), areas[ci]);
+    }
+}
+
+fn draw_search(frame: &mut Frame, query: &str) {
+    let area = centered_rect(60, 3, frame.area());
+    frame.render_widget(Clear, area);
+    let line = Line::from(vec![Span::raw(query.to_string()), Span::styled("▏", Style::new().fg(Color::Yellow))]);
+    frame.render_widget(
+        Paragraph::new(line).block(Block::bordered().title(" 검색 (Enter 적용 · Esc 취소) ")),
+        area,
+    );
+}
+
+fn draw_help(frame: &mut Frame) {
+    let area = centered_rect(46, 16, frame.area());
+    frame.render_widget(Clear, area);
+    let rows = [
+        ("j / k, ↑ / ↓", "이동 (보드: 컬럼 내)"),
+        ("h / l, ← / →", "보드 컬럼 이동"),
+        ("g / G", "처음 / 끝"),
+        ("Tab", "리스트 ↔ 보드 전환"),
+        ("n / e / d", "생성 / 수정 / 삭제"),
+        ("space", "완료 토글"),
+        ("/", "텍스트 검색"),
+        ("f", "상태 필터 순환"),
+        ("Esc", "필터 해제"),
+        ("r", "새로고침"),
+        ("? / q", "도움말 / 종료"),
+    ];
+    let mut lines = vec![Line::raw("")];
+    for (k, v) in rows {
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {k:<14}"), Style::new().fg(Color::Yellow)),
+            Span::raw(v),
+        ]));
+    }
+    frame.render_widget(
+        Paragraph::new(Text::from(lines)).block(Block::bordered().title(" 도움말 ")),
+        area,
+    );
 }
 
 /// 화면 중앙에 가로/세로 비율로 영역을 잡는다.
@@ -185,8 +269,12 @@ fn kv(key: &str, value: &str) -> Line<'static> {
 }
 
 fn draw_statusbar(frame: &mut Frame, app: &App, area: Rect) {
-    let left = format!(" [{}] {} ", app.backend_name(), app.status);
-    let hints = "n 새작업  e 수정  d 삭제  space 완료  r 새로고침  q 종료 ";
+    let view_tag = match app.view {
+        View::List => "리스트",
+        View::Board => "보드",
+    };
+    let left = format!(" [{}·{}] {}{} ", app.backend_name(), view_tag, app.filter_summary(), app.status);
+    let hints = "n 새작업  / 검색  f 필터  Tab 보드  ? 도움말  q 종료 ";
     let [l, r] = Layout::horizontal([Constraint::Min(1), Constraint::Length(display_width(hints))])
         .areas(area);
     frame.render_widget(Paragraph::new(left).style(Style::new().bg(Color::DarkGray).fg(Color::White)), l);

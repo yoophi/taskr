@@ -44,6 +44,8 @@ fn handle_event(app: &mut App) -> Result<()> {
         Mode::Normal => handle_normal(app, key.code),
         Mode::Form(_) => handle_form(app, key.code),
         Mode::ConfirmDelete { .. } => handle_confirm(app, key.code),
+        Mode::Search(_) => handle_search(app, key.code),
+        Mode::Help => app.cancel_modal(), // 아무 키나 닫기
     }
     Ok(())
 }
@@ -51,8 +53,10 @@ fn handle_event(app: &mut App) -> Result<()> {
 fn handle_normal(app: &mut App, code: KeyCode) {
     match code {
         KeyCode::Char('q') => app.should_quit = true,
-        KeyCode::Char('j') | KeyCode::Down => app.next(),
-        KeyCode::Char('k') | KeyCode::Up => app.prev(),
+        KeyCode::Char('j') | KeyCode::Down => app.move_down(),
+        KeyCode::Char('k') | KeyCode::Up => app.move_up(),
+        KeyCode::Char('h') | KeyCode::Left => app.move_left(),
+        KeyCode::Char('l') | KeyCode::Right => app.move_right(),
         KeyCode::Char('g') | KeyCode::Home => app.first(),
         KeyCode::Char('G') | KeyCode::End => app.last(),
         KeyCode::Char('r') => app.refresh(),
@@ -60,6 +64,21 @@ fn handle_normal(app: &mut App, code: KeyCode) {
         KeyCode::Char('e') => app.start_edit(),
         KeyCode::Char('d') => app.start_delete(),
         KeyCode::Char(' ') => app.toggle_status(),
+        KeyCode::Tab => app.toggle_view(),
+        KeyCode::Char('/') => app.start_search(),
+        KeyCode::Char('f') => app.cycle_status_filter(),
+        KeyCode::Char('?') => app.show_help(),
+        KeyCode::Esc => app.clear_filter(),
+        _ => {}
+    }
+}
+
+fn handle_search(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Esc => app.cancel_modal(),
+        KeyCode::Enter => app.submit_search(),
+        KeyCode::Backspace => app.search_backspace(),
+        KeyCode::Char(c) => app.search_input(c),
         _ => {}
     }
 }
